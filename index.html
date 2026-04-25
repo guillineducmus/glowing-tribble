@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Musical MCM 2 - Nextcloud</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            /* Assurez-vous d'avoir l'image 'semeur.jpg' dans le même dossier que ce fichier */
+            background: url('semeur.jpg') no-repeat center center fixed;
+            background-size: cover;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .quiz-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+        .header { text-align: center; margin-bottom: 20px; }
+        .score-display {
+            background: #2c3e50; color: white; padding: 10px 20px;
+            border-radius: 25px; display: inline-block; font-size: 18px; font-weight: bold; margin-bottom: 15px;
+        }
+        .question-number { font-size: 16px; color: #7f8c8d; margin-bottom: 10px; }
+        .audio-player { width: 100%; margin: 20px 0; background: #34495e; border-radius: 10px; padding: 15px; }
+        .audio-player audio { width: 100%; outline: none; }
+        .question { font-size: 24px; color: #2c3e50; text-align: center; margin: 20px 0; font-weight: bold; }
+        .answers { display: flex; flex-direction: column; gap: 15px; margin: 25px 0; }
+        .answer-btn {
+            padding: 18px 25px; font-size: 16px; border: 3px solid #3498db;
+            background: white; color: #2c3e50; border-radius: 10px;
+            cursor: pointer; transition: all 0.3s ease; text-align: left; font-weight: 500;
+        }
+        .answer-btn:hover:not(:disabled) { background: #3498db; color: white; transform: translateX(5px); }
+        .answer-btn.selected { background: #3498db; color: white; border-color: #2980b9; }
+        .answer-btn.correct { background: #27ae60; color: white; border-color: #219a52; }
+        .answer-btn.wrong { background: #e74c3c; color: white; border-color: #c0392b; }
+        .answer-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+        .validate-btn, .next-btn, .restart-btn {
+            background: #e74c3c; color: white; border: none; padding: 15px 40px;
+            font-size: 18px; border-radius: 25px; cursor: pointer;
+            display: block; margin: 20px auto; transition: all 0.3s ease; font-weight: bold;
+        }
+        .validate-btn:hover, .next-btn:hover, .restart-btn:hover { background: #c0392b; transform: scale(1.05); }
+        .next-btn { background: #3498db; display: none; }
+        .next-btn:hover { background: #2980b9; }
+        .restart-btn { background: #27ae60; display: none; }
+        .restart-btn:hover { background: #219a52; }
+        .feedback {
+            text-align: center; font-size: 28px; font-weight: bold;
+            padding: 20px; border-radius: 10px; margin: 20px 0; display: none;
+        }
+        .feedback.bravo { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; display: block; }
+        .feedback.rate { background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; display: block; }
+        .final-score {
+            text-align: center; font-size: 48px; font-weight: bold;
+            color: #2c3e50; margin: 30px 0; padding: 30px;
+            background: #ecf0f1; border-radius: 15px;
+        }
+        .final-message { text-align: center; font-size: 22px; color: #7f8c8d; margin: 20px 0; }
+        .hidden { display: none; }
+        .progress-bar { width: 100%; height: 8px; background: #ecf0f1; border-radius: 4px; margin: 20px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: #3498db; transition: width 0.3s ease; }
+    </style>
+</head>
+<body>
+    <div class="quiz-container">
+        <div class="header">
+            <div class="score-display" id="scoreDisplay">Score : 0/20</div>
+            <div class="question-number" id="questionNumber">Question 1 sur 20</div>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressBar" style="width: 5%;"></div>
+        </div>
+
+        <div id="quizContent">
+            <div class="audio-player">
+                <audio id="audioPlayer" controls>
+                    <source src="" type="audio/mpeg">
+                    Votre navigateur ne supporte pas le lecteur audio.
+                </audio>
+            </div>
+            <div class="question">De quel extrait s'agit-il ?</div>
+            <div class="answers" id="answersContainer"></div>
+            <div class="feedback" id="feedback"></div>
+            <button class="validate-btn" id="validateBtn" onclick="validateAnswer()">Valider</button>
+            <button class="next-btn" id="nextBtn" onclick="nextQuestion()">Extrait suivant →</button>
+        </div>
+
+        <div id="finalScreen" class="hidden">
+            <div class="final-score" id="finalScore"></div>
+            <div class="final-message" id="finalMessage"></div>
+            <button class="restart-btn" id="restartBtn" onclick="restartQuiz()" style="display: block;">🔄 Refaire le quiz</button>
+        </div>
+    </div>
+
+    <script>
+        // BASE DE DONNÉES DES 21 EXTRAITS QUIZ 2 - LIENS DIRECTS NEXCLOUD ÉDUCATION
+        const allTracks = [
+            { id: 1, composer: "Albeniz", work: "Asturias (Leyenda)", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Albeniz%20-Asturias%20(Leyenda).mp3" },
+            { id: 2, composer: "Augusta Holmès", work: "Roland Furieux (allegro feroce)", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Augusta%20Holm%C3%A8s%20-Roland%20Furieux%20(allegro%20feroce).mp3" },
+            { id: 3, composer: "Bach", work: "Suite orchestrale 2 - Badinerie", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Bach%20-Suite%20orchestrale%202%20-Badinerie.mp3" },
+            { id: 4, composer: "Bartok", work: "4 danses roumaines BB76", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Bartok%20-4%20danses%20roumaines%20BB76.mp3" },
+            { id: 5, composer: "Bernstein", work: "West Side Story - America", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Bernstein%20-West%20Side%20Story%20-America.mp3" },
+            { id: 6, composer: "Brahms", work: "Danse hongroise n°5", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Brahms%20-Danse%20hongroise%20n%C2%B05.mp3" },
+            { id: 7, composer: "Debussy", work: "Nocturnes - No. 2, Fêtes", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Debussy%20-Nocturnes%20-%20No.%202%2C%20F%C3%AAtes.mp3" },
+            { id: 8, composer: "Haendel", work: "Sarabande", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Haendel%20-Sarabande.mp3" },
+            { id: 9, composer: "Haydn", work: "Symphonie No.49 - La passione 4. Finale (Presto)", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Haydn%20-symphonie%20No.49%20-La%20passione%204.%20Finale%20(Presto).mp3" },
+            { id: 10, composer: "Massenet", work: "Thaïs Méditation", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Massenet%20-Tha%C3%AFs%20M%C3%A9ditation.mp3" },
+            { id: 11, composer: "Monteverdi", work: "Le couronnement de Poppée - Pur ti miro", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Monteverdi%20-Le%20couronnement%20de%20Popp%C3%A9e%20-Pur%20ti%20miro.mp3" },
+            { id: 12, composer: "Mozart", work: "Sonate pour piano n°8 K310", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Mozart%20-Sonate%20pour%20piano%20n%C2%B08%20K310.mp3" },
+            { id: 13, composer: "Paganini", work: "Concerto pour violon No. 2 'La campanella'", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Paganini%20-%20Concerto%20pour%20violon%20No.%202%20'La%20campanella'.mp3" },
+            { id: 14, composer: "Prokofiev", work: "Danse des chevaliers - Romeo et Juliette", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Prokofiev%20-Danse%20des%20chevaliers%20-Romeo%20et%20Juliette.mp3" },
+            { id: 15, composer: "Purcell", work: "Musique pour les funérailles de la reine Mary", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Purcell%20-Musique%20pour%20les%20fun%C3%A9railles%20de%20la%20reine%20Mary.mp3" },
+            { id: 16, composer: "Rimski-Korsakov", work: "Le vol du bourdon", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Rimski-Korsakov%20-Le%20vol%20du%20bourdon.mp3" },
+            { id: 17, composer: "Satie", work: "Gnossienne No. 1", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Satie%20-Gnossienne%20No.%201.mp3" },
+            { id: 18, composer: "Schubert", work: "Trio n°2 - II Andante con moto", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Schubert%20-Trio%20n%C2%B02%20-II%20Andante%20con%20moto.mp3" },
+            { id: 19, composer: "Stravinsky", work: "L'oiseau de feu - Danse du roi Kaschei", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Stravinsky%20-L'oiseau%20de%20feu%20-%20Danse%20du%20roi%20Kaschei.mp3" },
+            { id: 20, composer: "Verdi", work: "Nabucco - Acte 3 « Va pensiero sull'ali dorate »", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Verdi%20-Nabucco%20-Acte%203%20%C2%AB%20Va%20pensiero%20sull'ali%20dorate%20%C2%BB.mp3" },
+            { id: 21, composer: "Villa-Lobos", work: "Bachianas brasileiras N°5 - Aria (Cantilena)", file: "https://nuage03.apps.education.fr/public.php/dav/files/a75CGxDmyDgnRpF/Villa-Lobos%20-Bachianas%20brasileiras%20N%C2%B05%20-%20Aria%20(Cantilena).mp3" }
+        ];
+
+        let currentQuestions = [];
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let selectedAnswer = null;
+
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        function selectQuestions() {
+            const shuffled = shuffleArray(allTracks);
+            currentQuestions = shuffled.slice(0, 20);
+        }
+
+        function generateAnswers(correctTrack) {
+            const otherTracks = allTracks.filter(t => t.id !== correctTrack.id);
+            const shuffledOthers = shuffleArray(otherTracks);
+            const wrongAnswers = shuffledOthers.slice(0, 2);
+            const answers = [
+                { text: `${correctTrack.composer} - ${correctTrack.work}`, correct: true, id: correctTrack.id },
+                { text: `${wrongAnswers[0].composer} - ${wrongAnswers[0].work}`, correct: false, id: wrongAnswers[0].id },
+                { text: `${wrongAnswers[1].composer} - ${wrongAnswers[1].work}`, correct: false, id: wrongAnswers[1].id }
+            ];
+            return shuffleArray(answers);
+        }
+
+        function displayQuestion() {
+            const currentTrack = currentQuestions[currentQuestionIndex];
+            const answers = generateAnswers(currentTrack);
+            
+            document.getElementById('questionNumber').textContent = `Question ${currentQuestionIndex + 1} sur 20`;
+            document.getElementById('scoreDisplay').textContent = `Score : ${score}/20`;
+            document.getElementById('progressBar').style.width = `${((currentQuestionIndex + 1) / 20) * 100}%`;
+            
+            const audioPlayer = document.getElementById('audioPlayer');
+            audioPlayer.src = currentTrack.file;
+            audioPlayer.load();
+            
+            const answersContainer = document.getElementById('answersContainer');
+            answersContainer.innerHTML = '';
+            
+            answers.forEach((answer) => {
+                const btn = document.createElement('button');
+                btn.className = 'answer-btn';
+                btn.textContent = answer.text;
+                btn.dataset.correct = answer.correct;
+                btn.onclick = () => selectAnswer(btn);
+                answersContainer.appendChild(btn);
+            });
+            
+            selectedAnswer = null;
+            document.getElementById('feedback').className = 'feedback';
+            document.getElementById('feedback').style.display = 'none';
+            document.getElementById('validateBtn').style.display = 'block';
+            document.getElementById('nextBtn').style.display = 'none';
+            
+            const allBtns = document.querySelectorAll('.answer-btn');
+            allBtns.forEach(btn => {
+                btn.disabled = false;
+                btn.classList.remove('selected', 'correct', 'wrong');
+            });
+        }
+
+        function selectAnswer(btn) {
+            if (document.getElementById('validateBtn').style.display === 'none') return;
+            document.querySelectorAll('.answer-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            selectedAnswer = btn;
+        }
+
+        function validateAnswer() {
+            if (!selectedAnswer) { alert("Veuillez sélectionner une réponse !"); return; }
+            
+            const isCorrect = selectedAnswer.dataset.correct === 'true';
+            const feedback = document.getElementById('feedback');
+            const allBtns = document.querySelectorAll('.answer-btn');
+            
+            allBtns.forEach(btn => {
+                btn.disabled = true;
+                if (btn.dataset.correct === 'true') btn.classList.add('correct');
+            });
+            
+            if (isCorrect) {
+                score++;
+                feedback.textContent = "🎉 Bravo !";
+                feedback.className = 'feedback bravo';
+            } else {
+                selectedAnswer.classList.add('wrong');
+                feedback.textContent = "❌ Raté !";
+                feedback.className = 'feedback rate';
+            }
+            
+            document.getElementById('scoreDisplay').textContent = `Score : ${score}/20`;
+            document.getElementById('validateBtn').style.display = 'none';
+            document.getElementById('nextBtn').style.display = 'block';
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex >= 20) showFinalResults();
+            else displayQuestion();
+        }
+
+        function showFinalResults() {
+            document.getElementById('quizContent').classList.add('hidden');
+            document.getElementById('finalScreen').classList.remove('hidden');
+            document.getElementById('questionNumber').style.display = 'none';
+            document.getElementById('scoreDisplay').style.display = 'none';
+            document.getElementById('progressBar').style.display = 'none';
+            
+            const finalScore = document.getElementById('finalScore');
+            const finalMessage = document.getElementById('finalMessage');
+            finalScore.textContent = `${score} / 20`;
+            
+            let message = "";
+            if (score === 20) message = "🏆 Exceptionnel ! Un sans faute !";
+            else if (score >= 17) message = "🌟 Excellent travail !";
+            else if (score >= 14) message = "👍 Très bien !";
+            else if (score >= 10) message = "✅ Bien ! Continuez comme ça !";
+            else if (score >= 5) message = "📚 Pas mal, mais vous pouvez faire mieux !";
+            else message = "💪 Courage, recommencez pour progresser !";
+            
+            finalMessage.textContent = message;
+        }
+
+        function restartQuiz() {
+            currentQuestionIndex = 0;
+            score = 0;
+            selectedAnswer = null;
+            document.getElementById('quizContent').classList.remove('hidden');
+            document.getElementById('finalScreen').classList.add('hidden');
+            document.getElementById('questionNumber').style.display = 'block';
+            document.getElementById('scoreDisplay').style.display = 'inline-block';
+            document.getElementById('progressBar').style.display = 'block';
+            selectQuestions();
+            displayQuestion();
+        }
+
+        window.onload = function() {
+            selectQuestions();
+            displayQuestion();
+        };
+    </script>
+</body>
+</html>
