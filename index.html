@@ -172,7 +172,7 @@
             // On ajoute ?download=1 à l'URL pour forcer Nextcloud à servir le fichier brut
             // Si l'URL contient déjà un '?', on utilise '&', sinon on utilise '?'
             const separator = currentTrack.file.includes('?') ? '&' : '?';
-            audioPlayer.src = currentTrack.file + separator + 'download=1';
+            audioPlayer.src = currentTrack.file + separator + 'forcedownload=1';
             audioPlayer.type = 'audio/mpeg'; // Force le navigateur à traiter cela comme un MP3
             audioPlayer.load();
             
